@@ -300,13 +300,33 @@ export const NewCampaignModal: React.FC<NewCampaignModalProps> = ({
     const newErrors: Record<string, string> = {};
 
     if (step === 1) {
-      // Basic Information validation
+      // Basic Information & Configuration validation
       if (!formData.name.trim()) {
         newErrors.name = 'Campaign name is required';
       }
 
       if (!formData.phoneNumber) {
         newErrors.phoneNumber = 'Phone number selection is required';
+      }
+
+      // IVR validation
+      if (!formData.ivr) {
+        newErrors.ivr = 'IVR selection is required';
+      }
+
+      // Campaign Configurations validation
+      if (formData.maxTries < 1 || formData.maxTries > 10) {
+        newErrors.maxTries = 'Maximum tries must be between 1 and 10';
+      }
+
+      if (formData.concurrency < 1 || formData.concurrency > 100) {
+        newErrors.concurrency = 'Concurrency must be between 1 and 100';
+      }
+
+      // Validate retry interval format (HH:MM:SS)
+      const timeRegex = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])$/;
+      if (!timeRegex.test(formData.retryInterval)) {
+        newErrors.retryInterval = 'Invalid time format. Use HH:MM:SS (00:00:00 to 23:59:59)';
       }
     }
 
@@ -353,23 +373,6 @@ export const NewCampaignModal: React.FC<NewCampaignModalProps> = ({
           }
         }
       });
-    }
-
-    if (step === 3) {
-      // Campaign Configurations validation (excluding IVR for step navigation)
-      if (formData.maxTries < 1 || formData.maxTries > 10) {
-        newErrors.maxTries = 'Maximum tries must be between 1 and 10';
-      }
-
-      if (formData.concurrency < 1 || formData.concurrency > 100) {
-        newErrors.concurrency = 'Concurrency must be between 1 and 100';
-      }
-
-      // Validate retry interval format (HH:MM:SS)
-      const timeRegex = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])$/;
-      if (!timeRegex.test(formData.retryInterval)) {
-        newErrors.retryInterval = 'Invalid time format. Use HH:MM:SS (00:00:00 to 23:59:59)';
-      }
     }
 
     setStepErrors(newErrors);
@@ -455,7 +458,7 @@ export const NewCampaignModal: React.FC<NewCampaignModalProps> = ({
 
   const handleNext = () => {
     if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(prev + 1, 3));
+      setCurrentStep(prev => Math.min(prev + 1, 2));
     }
   };
 
@@ -520,6 +523,13 @@ export const NewCampaignModal: React.FC<NewCampaignModalProps> = ({
   // Clear IVR error when user selects an IVR (only after submit attempt)
   const handleIvrChange = (value: string) => {
     setFormData(prev => ({ ...prev, ivr: value }));
+    if (stepErrors.ivr && value) {
+      setStepErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors.ivr;
+        return newErrors;
+      });
+    }
     if (hasAttemptedSubmit && submitErrors.ivr && value) {
       setSubmitErrors(prev => {
         const newErrors = { ...prev };
@@ -627,15 +637,14 @@ export const NewCampaignModal: React.FC<NewCampaignModalProps> = ({
   // Step indicator component
   const StepIndicator: React.FC = () => {
     const stepLabels = [
-      'Basic Information',
-      'Schedule Configuration', 
-      'Campaign Configurations'
+      'Basic Information & Configuration',
+      'Schedule Configuration'
     ];
 
     return (
       <div className="flex items-center justify-center mb-8">
         <div className="flex items-center space-x-4">
-          {[1, 2, 3].map((step) => (
+          {[1, 2].map((step) => (
             <React.Fragment key={step}>
               <div className="flex items-center">
                 <div className={`
@@ -653,7 +662,7 @@ export const NewCampaignModal: React.FC<NewCampaignModalProps> = ({
                   </div>
                 </div>
               </div>
-              {step < 3 && (
+              {step < 2 && (
                 <div className={`
                   w-12 h-0.5 transition-all duration-200
                   ${currentStep > step ? 'bg-blue-600' : 'bg-gray-200'}
@@ -695,103 +704,204 @@ export const NewCampaignModal: React.FC<NewCampaignModalProps> = ({
             <StepIndicator />
 
             <form onSubmit={handleSubmit} className="space-y-8">
-              {/* Step 1: Basic Information */}
+              {/* Step 1: Basic Information & Configuration */}
               {currentStep === 1 && (
                 <div className="space-y-6">
-                  <h3 className="text-heading-3 flex items-center">
-                    <Phone className="w-5 h-5 mr-2 text-blue-600" />
-                    Basic Information
-                  </h3>
+                  {/* Basic Information Section */}
+                  <div className="space-y-6">
+                    <h3 className="text-heading-3 flex items-center">
+                      <Phone className="w-5 h-5 mr-2 text-blue-600" />
+                      Basic Information
+                    </h3>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label htmlFor="campaign-name" className="block text-sm font-medium text-gray-700 mb-2">
-                        Campaign Name
-                      </label>
-                      <input
-                        id="campaign-name"
-                        type="text"
-                        value={formData.name}
-                        onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                        className="form-input"
-                        placeholder="Enter campaign name"
-                        aria-describedby={getError('name') ? "name-error" : undefined}
-                      />
-                      {getError('name') && <p id="name-error" className="text-red-500 text-sm mt-1">{getError('name')}</p>}
-                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label htmlFor="campaign-name" className="block text-sm font-medium text-gray-700 mb-2">
+                          Campaign Name
+                        </label>
+                        <input
+                          id="campaign-name"
+                          type="text"
+                          value={formData.name}
+                          onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                          className="form-input"
+                          placeholder="Enter campaign name"
+                          aria-describedby={getError('name') ? "name-error" : undefined}
+                        />
+                        {getError('name') && <p id="name-error" className="text-red-500 text-sm mt-1">{getError('name')}</p>}
+                      </div>
 
-                    {/* Phone Number Selection */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        <div className="flex items-center">
-                          <Phone className="w-4 h-4 mr-1" />
-                          Outbound Caller ID
-                          <div className="relative ml-2 group">
-                            <Info className="w-4 h-4 text-gray-400 cursor-help" />
-                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
-                              This number will appear as the caller ID to recipients
-                              <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                      {/* Phone Number Selection */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <div className="flex items-center">
+                            <Phone className="w-4 h-4 mr-1" />
+                            Outbound Caller ID
+                            <div className="relative ml-2 group">
+                              <Info className="w-4 h-4 text-gray-400 cursor-help" />
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+                                This number will appear as the caller ID to recipients
+                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </label>
-                      <div className="relative phone-number-dropdown-container">
-                        <button
-                          type="button"
-                          onClick={() => setIsPhoneNumberDropdownOpen(!isPhoneNumberDropdownOpen)}
-                          className={`w-full form-input text-left flex items-center justify-between ${
-                            getError('phoneNumber') ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''
-                          }`}
-                          aria-describedby={getError('phoneNumber') ? "phone-number-error" : undefined}
-                        >
-                          <div className="flex items-center">
-                            <span className={selectedPhoneNumber ? 'text-gray-900' : 'text-gray-400'}>
-                              {selectedPhoneNumber ? (
-                                <div className="flex items-center">
-                                  <span className="text-lg mr-2">{selectedPhoneNumber.flag}</span>
-                                  <span className="font-medium">{selectedPhoneNumber.formatted}</span>
-                                </div>
-                              ) : (
-                                'Select phone number'
-                              )}
-                            </span>
-                          </div>
-                          {isPhoneNumberDropdownOpen ? (
-                            <ChevronUp className="w-4 h-4 text-gray-400" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4 text-gray-400" />
-                          )}
-                        </button>
-
-                        {isPhoneNumberDropdownOpen && (
-                          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                            {PHONE_NUMBERS.map((phone, index) => (
-                              <button
-                                key={phone.id}
-                                type="button"
-                                onClick={() => handlePhoneNumberSelect(phone.id)}
-                                className={`w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center justify-between transition-colors duration-200 ${
-                                  index !== PHONE_NUMBERS.length - 1 ? 'border-b border-gray-100' : ''
-                                } ${
-                                  formData.phoneNumber === phone.id ? 'bg-blue-50 text-blue-700' : ''
-                                }`}
-                              >
-                                <div className="flex items-center">
-                                  <span className="text-lg mr-3">{phone.flag}</span>
-                                  <span className="font-medium">{phone.formatted}</span>
-                                </div>
-                                {formData.phoneNumber === phone.id && (
-                                  <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+                        </label>
+                        <div className="relative phone-number-dropdown-container">
+                          <button
+                            type="button"
+                            onClick={() => setIsPhoneNumberDropdownOpen(!isPhoneNumberDropdownOpen)}
+                            className={`w-full form-input text-left flex items-center justify-between ${
+                              getError('phoneNumber') ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''
+                            }`}
+                            aria-describedby={getError('phoneNumber') ? "phone-number-error" : undefined}
+                          >
+                            <div className="flex items-center">
+                              <span className={selectedPhoneNumber ? 'text-gray-900' : 'text-gray-400'}>
+                                {selectedPhoneNumber ? (
+                                  <div className="flex items-center">
+                                    <span className="text-lg mr-2">{selectedPhoneNumber.flag}</span>
+                                    <span className="font-medium">{selectedPhoneNumber.formatted}</span>
+                                  </div>
+                                ) : (
+                                  'Select phone number'
                                 )}
-                              </button>
-                            ))}
-                          </div>
-                        )}
+                              </span>
+                            </div>
+                            {isPhoneNumberDropdownOpen ? (
+                              <ChevronUp className="w-4 h-4 text-gray-400" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4 text-gray-400" />
+                            )}
+                          </button>
+
+                          {isPhoneNumberDropdownOpen && (
+                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                              {PHONE_NUMBERS.map((phone, index) => (
+                                <button
+                                  key={phone.id}
+                                  type="button"
+                                  onClick={() => handlePhoneNumberSelect(phone.id)}
+                                  className={`w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center justify-between transition-colors duration-200 ${
+                                    index !== PHONE_NUMBERS.length - 1 ? 'border-b border-gray-100' : ''
+                                  } ${
+                                    formData.phoneNumber === phone.id ? 'bg-blue-50 text-blue-700' : ''
+                                  }`}
+                                >
+                                  <div className="flex items-center">
+                                    <span className="text-lg mr-3">{phone.flag}</span>
+                                    <span className="font-medium">{phone.formatted}</span>
+                                  </div>
+                                  {formData.phoneNumber === phone.id && (
+                                    <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {getError('phoneNumber') && <p id="phone-number-error" className="text-red-500 text-sm mt-1">{getError('phoneNumber')}</p>}
+                        <p className="text-xs text-gray-500 mt-1">
+                          This number will be displayed to call recipients as the caller ID
+                        </p>
                       </div>
-                      {getError('phoneNumber') && <p id="phone-number-error" className="text-red-500 text-sm mt-1">{getError('phoneNumber')}</p>}
-                      <p className="text-xs text-gray-500 mt-1">
-                        This number will be displayed to call recipients as the caller ID
-                      </p>
+                    </div>
+                  </div>
+
+                  {/* Campaign Configuration Section */}
+                  <div className="space-y-6">
+                    <h3 className="text-heading-3 flex items-center">
+                      <Clock className="w-5 h-5 mr-2 text-blue-600" />
+                      Campaign Configuration
+                    </h3>
+
+                    {/* Row 1: IVR (left) and Concurrency (right) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* IVR Selection */}
+                      <div>
+                        <label htmlFor="ivr-select" className="block text-sm font-medium text-gray-700 mb-2">
+                          <div className="flex items-center">
+                            <Workflow className="w-4 h-4 mr-1" />
+                            IVR
+                          </div>
+                        </label>
+                        <select
+                          id="ivr-select"
+                          value={formData.ivr}
+                          onChange={(e) => handleIvrChange(e.target.value)}
+                          className={`form-select h-12 ${
+                            getError('ivr') ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''
+                          }`}
+                          aria-describedby={getError('ivr') ? "ivr-error" : undefined}
+                        >
+                          <option value="">Select IVR</option>
+                          {IVR_OPTIONS.map(ivr => (
+                            <option key={ivr} value={ivr}>{ivr}</option>
+                          ))}
+                        </select>
+                        {getError('ivr') && (
+                          <p id="ivr-error" className="text-red-500 text-sm mt-1">{getError('ivr')}</p>
+                        )}
+                        <p className="text-xs text-gray-500 mt-1">
+                          Interactive Voice Response system for call handling
+                        </p>
+                      </div>
+
+                      {/* Concurrency */}
+                      <div>
+                        <label htmlFor="concurrency" className="block text-sm font-medium text-gray-700 mb-2">
+                          Concurrency
+                        </label>
+                        <input
+                          id="concurrency"
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={formData.concurrency}
+                          onChange={(e) => setFormData(prev => ({ ...prev, concurrency: parseInt(e.target.value) || 1 }))}
+                          className="form-input h-12"
+                          aria-describedby={getError('concurrency') ? "concurrency-error" : undefined}
+                        />
+                        {getError('concurrency') && <p id="concurrency-error" className="text-red-500 text-sm mt-1">{getError('concurrency')}</p>}
+                        <p className="text-xs text-gray-500 mt-1">
+                          Maximum simultaneous calls
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Row 2: Maximum Tries (left) and Retry Interval (right) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Maximum Tries */}
+                      <div>
+                        <label htmlFor="max-tries" className="block text-sm font-medium text-gray-700 mb-2">
+                          Maximum Tries
+                        </label>
+                        <input
+                          id="max-tries"
+                          type="number"
+                          min="1"
+                          max="10"
+                          value={formData.maxTries}
+                          onChange={(e) => setFormData(prev => ({ ...prev, maxTries: parseInt(e.target.value) || 1 }))}
+                          className="form-input h-12"
+                          aria-describedby={getError('maxTries') ? "max-tries-error" : undefined}
+                        />
+                        {getError('maxTries') && <p id="max-tries-error" className="text-red-500 text-sm mt-1">{getError('maxTries')}</p>}
+                        <p className="text-xs text-gray-500 mt-1">
+                          Number of call attempts per contact
+                        </p>
+                      </div>
+
+                      {/* Retry Interval with Time Picker */}
+                      <div>
+                        <TimePicker
+                          value={formData.retryInterval}
+                          onChange={(value) => setFormData(prev => ({ ...prev, retryInterval: value }))}
+                          label="Retry Interval"
+                          error={getError('retryInterval')}
+                          helperText="Time to wait between retry attempts"
+                          required
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1026,106 +1136,7 @@ export const NewCampaignModal: React.FC<NewCampaignModalProps> = ({
                   </div>
                 </div>
               )}
-
-              {/* Step 3: Campaign Configurations */}
-              {currentStep === 3 && (
-                <div className="space-y-6">
-                  <h3 className="text-heading-3 flex items-center">
-                    <Clock className="w-5 h-5 mr-2 text-blue-600" />
-                    Campaign Configurations
-                  </h3>
-
-                  {/* Row 1: IVR (left) and Concurrency (right) */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* IVR Selection - Show error after submit attempt */}
                     <div>
-                      <label htmlFor="ivr-select" className="block text-sm font-medium text-gray-700 mb-2">
-                        <div className="flex items-center">
-                          <Workflow className="w-4 h-4 mr-1" />
-                          IVR
-                        </div>
-                      </label>
-                      <select
-                        id="ivr-select"
-                        value={formData.ivr}
-                        onChange={(e) => handleIvrChange(e.target.value)}
-                        className={`form-select h-12 ${
-                          hasAttemptedSubmit && submitErrors.ivr ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''
-                        }`}
-                        aria-describedby={hasAttemptedSubmit && submitErrors.ivr ? "ivr-error" : undefined}
-                      >
-                        <option value="">Select IVR</option>
-                        {IVR_OPTIONS.map(ivr => (
-                          <option key={ivr} value={ivr}>{ivr}</option>
-                        ))}
-                      </select>
-                      {hasAttemptedSubmit && submitErrors.ivr && (
-                        <p id="ivr-error" className="text-red-500 text-sm mt-1">{submitErrors.ivr}</p>
-                      )}
-                      <p className="text-xs text-gray-500 mt-1">
-                        Interactive Voice Response system for call handling
-                      </p>
-                    </div>
-
-                    {/* Concurrency */}
-                    <div>
-                      <label htmlFor="concurrency" className="block text-sm font-medium text-gray-700 mb-2">
-                        Concurrency
-                      </label>
-                      <input
-                        id="concurrency"
-                        type="number"
-                        min="1"
-                        max="100"
-                        value={formData.concurrency}
-                        onChange={(e) => setFormData(prev => ({ ...prev, concurrency: parseInt(e.target.value) || 1 }))}
-                        className="form-input h-12"
-                        aria-describedby={getError('concurrency') ? "concurrency-error" : undefined}
-                      />
-                      {getError('concurrency') && <p id="concurrency-error" className="text-red-500 text-sm mt-1">{getError('concurrency')}</p>}
-                      <p className="text-xs text-gray-500 mt-1">
-                        Maximum simultaneous calls
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Row 2: Maximum Tries (left) and Retry Interval (right) */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Maximum Tries */}
-                    <div>
-                      <label htmlFor="max-tries" className="block text-sm font-medium text-gray-700 mb-2">
-                        Maximum Tries
-                      </label>
-                      <input
-                        id="max-tries"
-                        type="number"
-                        min="1"
-                        max="10"
-                        value={formData.maxTries}
-                        onChange={(e) => setFormData(prev => ({ ...prev, maxTries: parseInt(e.target.value) || 1 }))}
-                        className="form-input h-12"
-                        aria-describedby={getError('maxTries') ? "max-tries-error" : undefined}
-                      />
-                      {getError('maxTries') && <p id="max-tries-error" className="text-red-500 text-sm mt-1">{getError('maxTries')}</p>}
-                      <p className="text-xs text-gray-500 mt-1">
-                        Number of call attempts per contact
-                      </p>
-                    </div>
-
-                    {/* Retry Interval with Time Picker */}
-                    <div>
-                      <TimePicker
-                        value={formData.retryInterval}
-                        onChange={(value) => setFormData(prev => ({ ...prev, retryInterval: value }))}
-                        label="Retry Interval"
-                        error={getError('retryInterval')}
-                        helperText="Time to wait between retry attempts"
-                        required
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* Form Actions */}
               <div className="flex items-center justify-between pt-6 border-t border-gray-200">
@@ -1151,7 +1162,7 @@ export const NewCampaignModal: React.FC<NewCampaignModalProps> = ({
                     Cancel
                   </button>
                   
-                  {currentStep < 3 ? (
+                  {currentStep < 2 ? (
                     <button
                       type="button"
                       onClick={handleNext}
